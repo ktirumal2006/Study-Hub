@@ -1,0 +1,66 @@
+service: studyhub-backend
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  region: ${env:AWS_REGION}
+  environment:
+    USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
+    USER_POOL_CLIENT_ID: ${env:COGNITO_APP_CLIENT_ID}
+
+
+  environment:
+    GROUPS_TABLE: Groups
+    USERS_TABLE: Users
+    SESSIONS_TABLE: StudySessions
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:Scan
+          Resource:
+            - arn:aws:dynamodb:us-east-1:842733143619:table/Groups
+            - arn:aws:dynamodb:us-east-1:842733143619:table/Users
+            - arn:aws:dynamodb:us-east-1:842733143619:table/StudySessions
+
+functions:
+  createGroup:
+    handler: backend/createGroup.handler
+    events:
+      - http:
+          path: group
+          method: post
+
+  joinGroup:
+    handler: backend/joinGroup.handler
+    events:
+      - http:
+          path: group/join
+          method: post
+
+  startSession:
+    handler: backend/startSession.handler
+    events:
+      - http:
+          path: session/start
+          method: post
+
+  endSession:
+    handler: backend/endSession.handler
+    events:
+      - http:
+          path: session/end
+          method: post
+
+  getLeaderboard:
+    handler: backend/getLeaderboard.handler
+    events:
+      - http:
+          path: leaderboard
+          method: get

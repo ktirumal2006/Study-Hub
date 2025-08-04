@@ -1,0 +1,125 @@
+{
+  "C:\\Users\\Kousil\\group-study-app\\infrastructure\\serverless.yml": {
+    "versionFramework": "4.17.1",
+    "servicePath": "C:\\Users\\Kousil\\group-study-app\\infrastructure\\serverless.yml",
+    "serviceConfigFileName": "serverless.yml",
+    "service": {
+      "service": "studyhub-backend",
+      "plugins": [
+        "serverless-offline",
+        "serverless-dynamodb-local"
+      ],
+      "provider": {
+        "name": "aws",
+        "runtime": "nodejs18.x",
+        "environment": {
+          "GROUPS_TABLE": "Groups",
+          "USERS_TABLE": "Users",
+          "SESSIONS_TABLE": "StudySessions"
+        },
+        "stage": "dev",
+        "region": "us-east-1",
+        "versionFunctions": true
+      },
+      "functions": {
+        "createGroup": {
+          "handler": "backend/createGroup.handler",
+          "events": [
+            {
+              "http": {
+                "path": "group",
+                "method": "post"
+              }
+            }
+          ],
+          "name": "studyhub-backend-dev-createGroup"
+        },
+        "joinGroup": {
+          "handler": "backend/joinGroup.handler",
+          "events": [
+            {
+              "http": {
+                "path": "group/join",
+                "method": "post"
+              }
+            }
+          ],
+          "name": "studyhub-backend-dev-joinGroup"
+        },
+        "startSession": {
+          "handler": "backend/startSession.handler",
+          "events": [
+            {
+              "http": {
+                "path": "session/start",
+                "method": "post"
+              }
+            }
+          ],
+          "name": "studyhub-backend-dev-startSession"
+        },
+        "endSession": {
+          "handler": "backend/endSession.handler",
+          "events": [
+            {
+              "http": {
+                "path": "session/end",
+                "method": "post"
+              }
+            }
+          ],
+          "name": "studyhub-backend-dev-endSession"
+        },
+        "getLeaderboard": {
+          "handler": "backend/getLeaderboard.handler",
+          "events": [
+            {
+              "http": {
+                "path": "leaderboard",
+                "method": "get"
+              }
+            }
+          ],
+          "name": "studyhub-backend-dev-getLeaderboard"
+        }
+      }
+    },
+    "provider": {
+      "name": "aws",
+      "runtime": "nodejs18.x",
+      "environment": {
+        "GROUPS_TABLE": "Groups",
+        "USERS_TABLE": "Users",
+        "SESSIONS_TABLE": "StudySessions"
+      },
+      "stage": "dev",
+      "region": "us-east-1",
+      "versionFunctions": true
+    },
+    "dashboard": {
+      "isEnabledForService": false,
+      "requiredAuthentication": false,
+      "orgFeaturesInUse": null,
+      "orgObservabilityIntegrations": null,
+      "serviceAppId": null,
+      "serviceProvider": null,
+      "instanceParameters": null
+    },
+    "serviceRawFile": "service: studyhub-backend\r\nplugins:\r\n  - serverless-offline\r\n  - serverless-dynamodb-local\r\nprovider:\r\n  name: aws\r\n  runtime: nodejs18.x\r\n  environment:\r\n    GROUPS_TABLE: Groups\r\n    USERS_TABLE: Users\r\n    SESSIONS_TABLE: StudySessions\r\nfunctions:\r\n  createGroup:\r\n    handler: backend/createGroup.handler\r\n    events:\r\n      - http:\r\n          path: group\r\n          method: post\r\n  joinGroup:\r\n    handler: backend/joinGroup.handler\r\n    events:\r\n      - http:\r\n          path: group/join\r\n          method: post\r\n  startSession:\r\n    handler: backend/startSession.handler\r\n    events:\r\n      - http:\r\n          path: session/start\r\n          method: post\r\n  endSession:\r\n    handler: backend/endSession.handler\r\n    events:\r\n      - http:\r\n          path: session/end\r\n          method: post\r\n  getLeaderboard:\r\n    handler: backend/getLeaderboard.handler\r\n    events:\r\n      - http:\r\n          path: leaderboard\r\n          method: get\r\n",
+    "command": [
+      "dynamodb",
+      "start"
+    ],
+    "options": {},
+    "orgId": "645a97b1-fa32-4510-9b8c-be206a2e7823",
+    "orgName": "studyhub",
+    "userId": "90Zff23Dzf6SyhcZvF",
+    "userName": "studyhub",
+    "serviceProviderAwsAccountId": "842733143619",
+    "serviceProviderAwsCfStackId": null,
+    "serviceProviderAwsCfStackCreated": null,
+    "serviceProviderAwsCfStackUpdated": null,
+    "serviceProviderAwsCfStackStatus": null,
+    "serviceProviderAwsCfStackOutputs": null
+  }
+}
