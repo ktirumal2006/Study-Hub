@@ -1,27 +1,65 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { ScanCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+// infrastructure/backend/getLeaderboard.js
+const { DynamoDBClient: DDBClient3 } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient: DocClient3, ScanCommand } = require("@aws-sdk/lib-dynamodb");
 
-const client5 = new DynamoDBClient({ region: "us-east-1" });
-const db5 = DynamoDBDocumentClient.from(client5);
-const USERS_TABLE3 = process.env.USERS_TABLE;
+const ddb3 = new DDBClient3();
+const docClient3 = DocClient3.from(ddb3);
 
-export const handler = async (event) => {
-  const { groupId, sortBy = "weeklyMinutes", limit = 10 } = event.queryStringParameters;
+exports.handler = async (event) => {
+  console.log("📢 getLeaderboard event:", JSON.stringify(event));
 
-  const data = await db5.send(
-    new ScanCommand({
-      TableName: USERS_TABLE3,
-      FilterExpression: "groupId = :g",
-      ExpressionAttributeValues: { ":g": groupId },
-    })
-  );
+  // Preflight
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "OPTIONS,GET"
+      },
+      body: ""
+    };
+  }
 
-  const sorted = (data.Items || [])
-    .sort((a, b) => b[sortBy] - a[sortBy])
-    .slice(0, limit);
+  const qs = event.queryStringParameters || {};
+  const groupId = qs.groupId;
+  const limit = parseInt(qs.limit) || 10;
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ leaderboard: sorted }),
-  };
+  if (!groupId) {
+    return {
+      statusCode: 422,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "groupId parameter is required" })
+    };
+  }
+
+  try {
+    const data = await docClient3.send(
+      new ScanCommand({
+        TableName: process.env.USERS_TABLE,
+        FilterExpression: "groupId = :g",
+        ExpressionAttributeValues: { ":g": groupId }
+      })
+    );
+
+    const sorted = (data.Items || [])
+      .sort((a, b) => b.weeklyMinutes - a.weeklyMinutes)
+      .slice(0, limit);
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization"
+      },
+      body: JSON.stringify({ leaderboard: sorted })
+    };
+  } catch (err) {
+    console.error("🔥 getLeaderboard error:", err);
+    return {
+      statusCode: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: err.message })
+    };
+  }
 };

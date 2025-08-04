@@ -1,21 +1,72 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { PutCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+// infrastructure/backend/startSession.js
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
-const client3 = new DynamoDBClient({});
-const db3 = DynamoDBDocumentClient.from(client3);
-const SESSIONS_TABLE = process.env.SESSIONS_TABLE;
+// Let SDK use Lambda's configured region
+const ddb = new DynamoDBClient();
+const docClient = DynamoDBDocumentClient.from(ddb);
 
-export const handler = async (event) => {
-  const { sessionId, userId, groupId } = JSON.parse(event.body);
-  const startTime = new Date().toISOString();
+exports.handler = async (event) => {
+  console.log("📢 startSession event:", JSON.stringify(event));
 
-  await db3.send(new PutCommand({
-    TableName: SESSIONS_TABLE,
-    Item: { sessionId, userId, groupId, startTime },
-  }));
+  // CORS preflight
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "OPTIONS,POST"
+      },
+      body: ""
+    };
+  }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ message: "Session started", sessionId, startTime }),
-  };
+  // Parse body
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch (err) {
+    console.error("❌ JSON.parse error:", err);
+    return {
+      statusCode: 400,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "Invalid JSON body" })
+    };
+  }
+
+  const { sessionId, userId, groupId } = body;
+  if (!sessionId || !userId || !groupId) {
+    console.warn("⚠️ Missing fields:", { sessionId, userId, groupId });
+    return {
+      statusCode: 422,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "sessionId, userId, and groupId are required" })
+    };
+  }
+
+  try {
+    await docClient.send(
+      new PutCommand({
+        TableName: process.env.SESSIONS_TABLE,
+        Item: { sessionId, userId, groupId, startTime: new Date().toISOString() }
+      })
+    );
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization"
+      },
+      body: JSON.stringify({ message: "Session started", sessionId })
+    };
+  } catch (err) {
+    console.error("🔥 startSession error:", err);
+    return {
+      statusCode: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: err.message })
+    };
+  }
 };
