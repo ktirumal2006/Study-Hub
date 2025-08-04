@@ -1,3 +1,4 @@
+Study-Hub
 
 A real‑time Pomodoro and session‑tracking web app with live leaderboards. Originally built in March 2025, publicly deployed now (August 2025).
 
