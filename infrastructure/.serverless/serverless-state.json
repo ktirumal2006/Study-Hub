@@ -6,11 +6,14 @@
     },
     "provider": {
       "name": "aws",
+      "stage": "prod",
       "region": "us-east-1",
       "environment": {
         "GROUPS_TABLE": "Groups",
         "USERS_TABLE": "Users",
-        "SESSIONS_TABLE": "StudySessions"
+        "SESSIONS_TABLE": "StudySessions",
+        "WS_CONNECTIONS_TABLE": "Connections",
+        "WS_MESSAGES_TABLE": "Messages"
       },
       "iam": {
         "role": {
@@ -21,18 +24,29 @@
                 "dynamodb:PutItem",
                 "dynamodb:UpdateItem",
                 "dynamodb:Scan",
-                "dynamodb:GetItem"
+                "dynamodb:GetItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:Query"
               ],
               "Resource": [
                 "arn:aws:dynamodb:us-east-1:842733143619:table/Groups",
                 "arn:aws:dynamodb:us-east-1:842733143619:table/Users",
-                "arn:aws:dynamodb:us-east-1:842733143619:table/StudySessions"
+                "arn:aws:dynamodb:us-east-1:842733143619:table/StudySessions",
+                "arn:aws:dynamodb:us-east-1:*:table/Connections",
+                "arn:aws:dynamodb:us-east-1:*:table/Messages",
+                "arn:aws:dynamodb:us-east-1:*:table/Messages/index/*"
               ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "execute-api:ManageConnections"
+              ],
+              "Resource": "arn:aws:execute-api:us-east-1:*:**/@connections/*"
             }
           ]
         }
       },
-      "stage": "dev",
       "versionFunctions": true,
       "compiledCloudFormationTemplate": {
         "AWSTemplateFormatVersion": "2010-09-09",
@@ -41,31 +55,61 @@
           "CreateGroupLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/studyhub-backend-dev-createGroup"
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-createGroup"
             }
           },
           "JoinGroupLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/studyhub-backend-dev-joinGroup"
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-joinGroup"
             }
           },
           "StartSessionLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/studyhub-backend-dev-startSession"
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-startSession"
             }
           },
           "EndSessionLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/studyhub-backend-dev-endSession"
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-endSession"
             }
           },
           "GetLeaderboardLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/studyhub-backend-dev-getLeaderboard"
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-getLeaderboard"
+            }
+          },
+          "WsConnectLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-wsConnect"
+            }
+          },
+          "WsDisconnectLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-wsDisconnect"
+            }
+          },
+          "WsDefaultLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-wsDefault"
+            }
+          },
+          "WsSendMessageLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-wsSendMessage"
+            }
+          },
+          "WsTypingLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+              "LogGroupName": "/aws/lambda/studyhub-backend-prod-wsTyping"
             }
           },
           "IamRoleLambdaExecution": {
@@ -94,7 +138,7 @@
                       "-",
                       [
                         "studyhub-backend",
-                        "dev",
+                        "prod",
                         "lambda"
                       ]
                     ]
@@ -111,7 +155,7 @@
                         ],
                         "Resource": [
                           {
-                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/studyhub-backend-dev*:*"
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/studyhub-backend-prod*:*"
                           }
                         ]
                       },
@@ -122,12 +166,26 @@
                         ],
                         "Resource": [
                           {
-                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/studyhub-backend-dev*:*:*"
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/studyhub-backend-prod*:*:*"
                           }
                         ]
                       },
                       {
                         "$ref": "$[\"service\"][\"provider\"][\"iam\"][\"role\"][\"statements\"][0]"
+                      },
+                      {
+                        "$ref": "$[\"service\"][\"provider\"][\"iam\"][\"role\"][\"statements\"][1]"
+                      },
+                      {
+                        "Effect": "Allow",
+                        "Action": [
+                          "execute-api:ManageConnections"
+                        ],
+                        "Resource": [
+                          {
+                            "Fn::Sub": "arn:${AWS::Partition}:execute-api:*:*:*/@connections/*"
+                          }
+                        ]
                       }
                     ]
                   }
@@ -139,7 +197,7 @@
                   "-",
                   [
                     "studyhub-backend",
-                    "dev",
+                    "prod",
                     {
                       "Ref": "AWS::Region"
                     },
@@ -154,18 +212,20 @@
             "Properties": {
               "Code": {
                 "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
-                "S3Key": "serverless/studyhub-backend/dev/1754340219730-2025-08-04T20:43:39.730Z/studyhub-backend.zip"
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
               },
               "Handler": "backend/createGroup.handler",
               "Runtime": "nodejs20.x",
-              "FunctionName": "studyhub-backend-dev-createGroup",
+              "FunctionName": "studyhub-backend-prod-createGroup",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
                   "GROUPS_TABLE": "Groups",
                   "USERS_TABLE": "Users",
-                  "SESSIONS_TABLE": "StudySessions"
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
                 }
               },
               "Role": {
@@ -184,18 +244,20 @@
             "Properties": {
               "Code": {
                 "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
-                "S3Key": "serverless/studyhub-backend/dev/1754340219730-2025-08-04T20:43:39.730Z/studyhub-backend.zip"
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
               },
               "Handler": "backend/joinGroup.handler",
               "Runtime": "nodejs20.x",
-              "FunctionName": "studyhub-backend-dev-joinGroup",
+              "FunctionName": "studyhub-backend-prod-joinGroup",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
                   "GROUPS_TABLE": "Groups",
                   "USERS_TABLE": "Users",
-                  "SESSIONS_TABLE": "StudySessions"
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
                 }
               },
               "Role": {
@@ -214,18 +276,20 @@
             "Properties": {
               "Code": {
                 "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
-                "S3Key": "serverless/studyhub-backend/dev/1754340219730-2025-08-04T20:43:39.730Z/studyhub-backend.zip"
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
               },
               "Handler": "backend/startSession.handler",
               "Runtime": "nodejs20.x",
-              "FunctionName": "studyhub-backend-dev-startSession",
+              "FunctionName": "studyhub-backend-prod-startSession",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
                   "GROUPS_TABLE": "Groups",
                   "USERS_TABLE": "Users",
-                  "SESSIONS_TABLE": "StudySessions"
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
                 }
               },
               "Role": {
@@ -244,18 +308,20 @@
             "Properties": {
               "Code": {
                 "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
-                "S3Key": "serverless/studyhub-backend/dev/1754340219730-2025-08-04T20:43:39.730Z/studyhub-backend.zip"
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
               },
               "Handler": "backend/endSession.handler",
               "Runtime": "nodejs20.x",
-              "FunctionName": "studyhub-backend-dev-endSession",
+              "FunctionName": "studyhub-backend-prod-endSession",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
                   "GROUPS_TABLE": "Groups",
                   "USERS_TABLE": "Users",
-                  "SESSIONS_TABLE": "StudySessions"
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
                 }
               },
               "Role": {
@@ -274,18 +340,20 @@
             "Properties": {
               "Code": {
                 "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
-                "S3Key": "serverless/studyhub-backend/dev/1754340219730-2025-08-04T20:43:39.730Z/studyhub-backend.zip"
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
               },
               "Handler": "backend/getLeaderboard.handler",
               "Runtime": "nodejs20.x",
-              "FunctionName": "studyhub-backend-dev-getLeaderboard",
+              "FunctionName": "studyhub-backend-prod-getLeaderboard",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
                   "GROUPS_TABLE": "Groups",
                   "USERS_TABLE": "Users",
-                  "SESSIONS_TABLE": "StudySessions"
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
                 }
               },
               "Role": {
@@ -299,60 +367,270 @@
               "GetLeaderboardLogGroup"
             ]
           },
-          "CreateGroupLambdaVersionBIgLLxBVI35EeOnZjbfTWZiil69e52YDnZeP2JhR80": {
+          "WsConnectLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
+              },
+              "Handler": "backend/ws/connect.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "studyhub-backend-prod-wsConnect",
+              "MemorySize": 1024,
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "GROUPS_TABLE": "Groups",
+                  "USERS_TABLE": "Users",
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WsConnectLogGroup"
+            ]
+          },
+          "WsDisconnectLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
+              },
+              "Handler": "backend/ws/disconnect.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "studyhub-backend-prod-wsDisconnect",
+              "MemorySize": 1024,
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "GROUPS_TABLE": "Groups",
+                  "USERS_TABLE": "Users",
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WsDisconnectLogGroup"
+            ]
+          },
+          "WsDefaultLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
+              },
+              "Handler": "backend/ws/default.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "studyhub-backend-prod-wsDefault",
+              "MemorySize": 1024,
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "GROUPS_TABLE": "Groups",
+                  "USERS_TABLE": "Users",
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WsDefaultLogGroup"
+            ]
+          },
+          "WsSendMessageLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
+              },
+              "Handler": "backend/ws/sendMessage.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "studyhub-backend-prod-wsSendMessage",
+              "MemorySize": 1024,
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "GROUPS_TABLE": "Groups",
+                  "USERS_TABLE": "Users",
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WsSendMessageLogGroup"
+            ]
+          },
+          "WsTypingLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+              "Code": {
+                "S3Bucket": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
+                "S3Key": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z/studyhub-backend.zip"
+              },
+              "Handler": "backend/ws/typing.handler",
+              "Runtime": "nodejs20.x",
+              "FunctionName": "studyhub-backend-prod-wsTyping",
+              "MemorySize": 1024,
+              "Timeout": 6,
+              "Environment": {
+                "Variables": {
+                  "GROUPS_TABLE": "Groups",
+                  "USERS_TABLE": "Users",
+                  "SESSIONS_TABLE": "StudySessions",
+                  "WS_CONNECTIONS_TABLE": "Connections",
+                  "WS_MESSAGES_TABLE": "Messages"
+                }
+              },
+              "Role": {
+                "Fn::GetAtt": [
+                  "IamRoleLambdaExecution",
+                  "Arn"
+                ]
+              }
+            },
+            "DependsOn": [
+              "WsTypingLogGroup"
+            ]
+          },
+          "CreateGroupLambdaVersionUohhqFqVFrF888N1H9xXda2RzqRtGwdgDcmRrvrY": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "CreateGroupLambdaFunction"
               },
-              "CodeSha256": "PnEkm4gKEAnsOhmEWHQHjVB59K2P79BS/rpDYXmUrmc="
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
             }
           },
-          "JoinGroupLambdaVersionkuIG4eAcuLOwNxhGOT6MOyukj3zW31a8Pzb4jB4MYY": {
+          "JoinGroupLambdaVersionnj80AinrJEpZsYfhw785ht6cVSkd3FU7WbESrvA8GR4": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "JoinGroupLambdaFunction"
               },
-              "CodeSha256": "PnEkm4gKEAnsOhmEWHQHjVB59K2P79BS/rpDYXmUrmc="
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
             }
           },
-          "StartSessionLambdaVersionbOTvQ3j1uYnEOqcDAXG1cBH3SnyR3F0oKzYaCqPo": {
+          "StartSessionLambdaVersiondDU6NrfZY2mFb3o94Z2NC8YZriVVRHPFdMrKudB0A": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "StartSessionLambdaFunction"
               },
-              "CodeSha256": "PnEkm4gKEAnsOhmEWHQHjVB59K2P79BS/rpDYXmUrmc="
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
             }
           },
-          "EndSessionLambdaVersionxZFHFccG66CXXkNatflznOgaV6Dd94RJ9CtAOG1GqCw": {
+          "EndSessionLambdaVersionsKZBcefIJjPpJwyURTBh80N68gFNIoFyv1DBcX4Coo": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "EndSessionLambdaFunction"
               },
-              "CodeSha256": "PnEkm4gKEAnsOhmEWHQHjVB59K2P79BS/rpDYXmUrmc="
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
             }
           },
-          "GetLeaderboardLambdaVersiongbtOkXX3O34wdrNej4tQydATWO7iDhHKGyV7BI9d9PM": {
+          "GetLeaderboardLambdaVersionb0tjEePp4MzHhQsfYE9WpWnrp1dKfWAWbhUszGF4": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "GetLeaderboardLambdaFunction"
               },
-              "CodeSha256": "PnEkm4gKEAnsOhmEWHQHjVB59K2P79BS/rpDYXmUrmc="
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
+            }
+          },
+          "WsConnectLambdaVersionuVdo5iekoIeiNZM5Zy7zTKO8eeELvVOvFyHBXneUmk": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WsConnectLambdaFunction"
+              },
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
+            }
+          },
+          "WsDisconnectLambdaVersionz0YdhGmpFIyuqNW6zGwBti8dyTx1Mfua2NC3VAoOt5k": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WsDisconnectLambdaFunction"
+              },
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
+            }
+          },
+          "WsDefaultLambdaVersionwb2iS23iTEB8fswS3vBPcgiAemZDKnB0YJhdjanU0": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WsDefaultLambdaFunction"
+              },
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
+            }
+          },
+          "WsSendMessageLambdaVersionnojJzorMLdzkMa8H8Y51cx23zNAfn6RLwVIbPBI": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WsSendMessageLambdaFunction"
+              },
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
+            }
+          },
+          "WsTypingLambdaVersion4sqkAvXpUl1w4urjI5eCykqxeBIaVL3cd0dt1jMFPA": {
+            "Type": "AWS::Lambda::Version",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+              "FunctionName": {
+                "Ref": "WsTypingLambdaFunction"
+              },
+              "CodeSha256": "u3VBBBMvEISgo/fJsTZ5ZtwuJ38QyKbrT7BZzgNHCts="
             }
           },
           "ApiGatewayRestApi": {
             "Type": "AWS::ApiGateway::RestApi",
             "Properties": {
-              "Name": "dev-studyhub-backend",
+              "Name": "prod-studyhub-backend",
               "EndpointConfiguration": {
                 "Types": [
                   "EDGE"
@@ -897,13 +1175,13 @@
               "GetLeaderboardLambdaPermissionApiGateway"
             ]
           },
-          "ApiGatewayDeployment1754340209352": {
+          "ApiGatewayDeployment1767114562644": {
             "Type": "AWS::ApiGateway::Deployment",
             "Properties": {
               "RestApiId": {
                 "Ref": "ApiGatewayRestApi"
               },
-              "StageName": "dev"
+              "StageName": "prod"
             },
             "DependsOn": [
               "ApiGatewayMethodGroupOptions",
@@ -1102,58 +1380,541 @@
                 ]
               }
             }
+          },
+          "WebsocketsApi": {
+            "Type": "AWS::ApiGatewayV2::Api",
+            "Properties": {
+              "Name": "prod-studyhub-backend-websockets",
+              "RouteSelectionExpression": "$request.body.action",
+              "Description": "Serverless Websockets",
+              "ProtocolType": "WEBSOCKET"
+            }
+          },
+          "WsConnectWebsocketsIntegration": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":apigateway:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":lambda:path/2015-03-31/functions/",
+                    {
+                      "Fn::GetAtt": [
+                        "WsConnectLambdaFunction",
+                        "Arn"
+                      ]
+                    },
+                    "/invocations"
+                  ]
+                ]
+              }
+            }
+          },
+          "WsDisconnectWebsocketsIntegration": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":apigateway:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":lambda:path/2015-03-31/functions/",
+                    {
+                      "Fn::GetAtt": [
+                        "WsDisconnectLambdaFunction",
+                        "Arn"
+                      ]
+                    },
+                    "/invocations"
+                  ]
+                ]
+              }
+            }
+          },
+          "WsDefaultWebsocketsIntegration": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":apigateway:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":lambda:path/2015-03-31/functions/",
+                    {
+                      "Fn::GetAtt": [
+                        "WsDefaultLambdaFunction",
+                        "Arn"
+                      ]
+                    },
+                    "/invocations"
+                  ]
+                ]
+              }
+            }
+          },
+          "WsSendMessageWebsocketsIntegration": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":apigateway:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":lambda:path/2015-03-31/functions/",
+                    {
+                      "Fn::GetAtt": [
+                        "WsSendMessageLambdaFunction",
+                        "Arn"
+                      ]
+                    },
+                    "/invocations"
+                  ]
+                ]
+              }
+            }
+          },
+          "WsTypingWebsocketsIntegration": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":apigateway:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":lambda:path/2015-03-31/functions/",
+                    {
+                      "Fn::GetAtt": [
+                        "WsTypingLambdaFunction",
+                        "Arn"
+                      ]
+                    },
+                    "/invocations"
+                  ]
+                ]
+              }
+            }
+          },
+          "WsConnectLambdaPermissionWebsockets": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+              "WebsocketsApi",
+              "WsConnectLambdaFunction"
+            ],
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "WsConnectLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com"
+            }
+          },
+          "WsDisconnectLambdaPermissionWebsockets": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+              "WebsocketsApi",
+              "WsDisconnectLambdaFunction"
+            ],
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "WsDisconnectLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com"
+            }
+          },
+          "WsDefaultLambdaPermissionWebsockets": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+              "WebsocketsApi",
+              "WsDefaultLambdaFunction"
+            ],
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "WsDefaultLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com"
+            }
+          },
+          "WsSendMessageLambdaPermissionWebsockets": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+              "WebsocketsApi",
+              "WsSendMessageLambdaFunction"
+            ],
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "WsSendMessageLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com"
+            }
+          },
+          "WsTypingLambdaPermissionWebsockets": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+              "WebsocketsApi",
+              "WsTypingLambdaFunction"
+            ],
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "WsTypingLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com"
+            }
+          },
+          "SconnectWebsocketsRoute": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "RouteKey": "$connect",
+              "AuthorizationType": "NONE",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "WsConnectWebsocketsIntegration"
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          "SdisconnectWebsocketsRoute": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "RouteKey": "$disconnect",
+              "AuthorizationType": "NONE",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "WsDisconnectWebsocketsIntegration"
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          "SdefaultWebsocketsRoute": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "RouteKey": "$default",
+              "AuthorizationType": "NONE",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "WsDefaultWebsocketsIntegration"
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          "sendMessageWebsocketsRoute": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "RouteKey": "sendMessage",
+              "AuthorizationType": "NONE",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "WsSendMessageWebsocketsIntegration"
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          "typingWebsocketsRoute": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "RouteKey": "typing",
+              "AuthorizationType": "NONE",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "WsTypingWebsocketsIntegration"
+                    }
+                  ]
+                ]
+              }
+            }
+          },
+          "WebsocketsDeploymentStage": {
+            "Type": "AWS::ApiGatewayV2::Stage",
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "StageName": "prod",
+              "Description": "Serverless Websockets",
+              "DeploymentId": {
+                "Ref": "WebsocketsDeploymentHwVGjqR4AVnLjfBKk5qPmuVFtOLOjrgOJBrQzOMkpIM"
+              }
+            }
+          },
+          "WebsocketsDeploymentHwVGjqR4AVnLjfBKk5qPmuVFtOLOjrgOJBrQzOMkpIM": {
+            "Type": "AWS::ApiGatewayV2::Deployment",
+            "DependsOn": [
+              "SconnectWebsocketsRoute",
+              "SdisconnectWebsocketsRoute",
+              "SdefaultWebsocketsRoute",
+              "sendMessageWebsocketsRoute",
+              "typingWebsocketsRoute"
+            ],
+            "Properties": {
+              "ApiId": {
+                "Ref": "WebsocketsApi"
+              },
+              "Description": "Serverless Websockets"
+            }
+          },
+          "ConnectionsTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+              "TableName": "Connections",
+              "BillingMode": "PAY_PER_REQUEST",
+              "AttributeDefinitions": [
+                {
+                  "AttributeName": "connectionId",
+                  "AttributeType": "S"
+                }
+              ],
+              "KeySchema": [
+                {
+                  "AttributeName": "connectionId",
+                  "KeyType": "HASH"
+                }
+              ],
+              "TimeToLiveSpecification": {
+                "AttributeName": "ttl",
+                "Enabled": true
+              }
+            }
+          },
+          "MessagesTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+              "TableName": "Messages",
+              "BillingMode": "PAY_PER_REQUEST",
+              "AttributeDefinitions": [
+                {
+                  "AttributeName": "groupId",
+                  "AttributeType": "S"
+                },
+                {
+                  "AttributeName": "timestamp",
+                  "AttributeType": "N"
+                }
+              ],
+              "KeySchema": [
+                {
+                  "AttributeName": "groupId",
+                  "KeyType": "HASH"
+                },
+                {
+                  "AttributeName": "timestamp",
+                  "KeyType": "RANGE"
+                }
+              ]
+            }
           }
         },
         "Outputs": {
           "ServerlessDeploymentBucketName": {
             "Value": "serverless-framework-deployments-us-east-1-692c2c92-40b4",
             "Export": {
-              "Name": "sls-studyhub-backend-dev-ServerlessDeploymentBucketName"
+              "Name": "sls-studyhub-backend-prod-ServerlessDeploymentBucketName"
             }
           },
           "CreateGroupLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "CreateGroupLambdaVersionBIgLLxBVI35EeOnZjbfTWZiil69e52YDnZeP2JhR80"
+              "Ref": "CreateGroupLambdaVersionUohhqFqVFrF888N1H9xXda2RzqRtGwdgDcmRrvrY"
             },
             "Export": {
-              "Name": "sls-studyhub-backend-dev-CreateGroupLambdaFunctionQualifiedArn"
+              "Name": "sls-studyhub-backend-prod-CreateGroupLambdaFunctionQualifiedArn"
             }
           },
           "JoinGroupLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "JoinGroupLambdaVersionkuIG4eAcuLOwNxhGOT6MOyukj3zW31a8Pzb4jB4MYY"
+              "Ref": "JoinGroupLambdaVersionnj80AinrJEpZsYfhw785ht6cVSkd3FU7WbESrvA8GR4"
             },
             "Export": {
-              "Name": "sls-studyhub-backend-dev-JoinGroupLambdaFunctionQualifiedArn"
+              "Name": "sls-studyhub-backend-prod-JoinGroupLambdaFunctionQualifiedArn"
             }
           },
           "StartSessionLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "StartSessionLambdaVersionbOTvQ3j1uYnEOqcDAXG1cBH3SnyR3F0oKzYaCqPo"
+              "Ref": "StartSessionLambdaVersiondDU6NrfZY2mFb3o94Z2NC8YZriVVRHPFdMrKudB0A"
             },
             "Export": {
-              "Name": "sls-studyhub-backend-dev-StartSessionLambdaFunctionQualifiedArn"
+              "Name": "sls-studyhub-backend-prod-StartSessionLambdaFunctionQualifiedArn"
             }
           },
           "EndSessionLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "EndSessionLambdaVersionxZFHFccG66CXXkNatflznOgaV6Dd94RJ9CtAOG1GqCw"
+              "Ref": "EndSessionLambdaVersionsKZBcefIJjPpJwyURTBh80N68gFNIoFyv1DBcX4Coo"
             },
             "Export": {
-              "Name": "sls-studyhub-backend-dev-EndSessionLambdaFunctionQualifiedArn"
+              "Name": "sls-studyhub-backend-prod-EndSessionLambdaFunctionQualifiedArn"
             }
           },
           "GetLeaderboardLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "GetLeaderboardLambdaVersiongbtOkXX3O34wdrNej4tQydATWO7iDhHKGyV7BI9d9PM"
+              "Ref": "GetLeaderboardLambdaVersionb0tjEePp4MzHhQsfYE9WpWnrp1dKfWAWbhUszGF4"
             },
             "Export": {
-              "Name": "sls-studyhub-backend-dev-GetLeaderboardLambdaFunctionQualifiedArn"
+              "Name": "sls-studyhub-backend-prod-GetLeaderboardLambdaFunctionQualifiedArn"
+            }
+          },
+          "WsConnectLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WsConnectLambdaVersionuVdo5iekoIeiNZM5Zy7zTKO8eeELvVOvFyHBXneUmk"
+            },
+            "Export": {
+              "Name": "sls-studyhub-backend-prod-WsConnectLambdaFunctionQualifiedArn"
+            }
+          },
+          "WsDisconnectLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WsDisconnectLambdaVersionz0YdhGmpFIyuqNW6zGwBti8dyTx1Mfua2NC3VAoOt5k"
+            },
+            "Export": {
+              "Name": "sls-studyhub-backend-prod-WsDisconnectLambdaFunctionQualifiedArn"
+            }
+          },
+          "WsDefaultLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WsDefaultLambdaVersionwb2iS23iTEB8fswS3vBPcgiAemZDKnB0YJhdjanU0"
+            },
+            "Export": {
+              "Name": "sls-studyhub-backend-prod-WsDefaultLambdaFunctionQualifiedArn"
+            }
+          },
+          "WsSendMessageLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WsSendMessageLambdaVersionnojJzorMLdzkMa8H8Y51cx23zNAfn6RLwVIbPBI"
+            },
+            "Export": {
+              "Name": "sls-studyhub-backend-prod-WsSendMessageLambdaFunctionQualifiedArn"
+            }
+          },
+          "WsTypingLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "WsTypingLambdaVersion4sqkAvXpUl1w4urjI5eCykqxeBIaVL3cd0dt1jMFPA"
+            },
+            "Export": {
+              "Name": "sls-studyhub-backend-prod-WsTypingLambdaFunctionQualifiedArn"
             }
           },
           "ServiceEndpoint": {
@@ -1174,17 +1935,70 @@
                   {
                     "Ref": "AWS::URLSuffix"
                   },
-                  "/dev"
+                  "/prod"
                 ]
               ]
             },
             "Export": {
-              "Name": "sls-studyhub-backend-dev-ServiceEndpoint"
+              "Name": "sls-studyhub-backend-prod-ServiceEndpoint"
+            }
+          },
+          "ServiceEndpointWebsocket": {
+            "Description": "URL of the service endpoint",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "wss://",
+                  {
+                    "Ref": "WebsocketsApi"
+                  },
+                  ".execute-api.",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  ".",
+                  {
+                    "Ref": "AWS::URLSuffix"
+                  },
+                  "/prod"
+                ]
+              ]
+            },
+            "Export": {
+              "Name": "sls-studyhub-backend-prod-ServiceEndpointWebsocket"
+            }
+          },
+          "WebsocketsApiEndpoint": {
+            "Description": "WebSocket API endpoint",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "wss://",
+                  {
+                    "Ref": "WebsocketsApi"
+                  },
+                  ".execute-api.",
+                  "us-east-1",
+                  ".amazonaws.com/",
+                  "prod"
+                ]
+              ]
+            },
+            "Export": {
+              "Name": "studyhub-backend-prod-WebsocketsApiEndpoint"
             }
           }
         }
       },
       "vpc": {}
+    },
+    "custom": {
+      "websocketsApiName": "studyhub-ws",
+      "stage": "prod",
+      "region": "us-east-1",
+      "awsAccountId": "842733143619"
     },
     "plugins": [
       "serverless-offline"
@@ -1214,13 +2028,13 @@
             }
           }
         ],
-        "name": "studyhub-backend-dev-createGroup",
+        "name": "studyhub-backend-prod-createGroup",
         "package": {},
         "memory": 1024,
         "timeout": 6,
         "runtime": "nodejs20.x",
         "vpc": {},
-        "versionLogicalId": "CreateGroupLambdaVersionBIgLLxBVI35EeOnZjbfTWZiil69e52YDnZeP2JhR80"
+        "versionLogicalId": "CreateGroupLambdaVersionUohhqFqVFrF888N1H9xXda2RzqRtGwdgDcmRrvrY"
       },
       "joinGroup": {
         "handler": "backend/joinGroup.handler",
@@ -1245,13 +2059,13 @@
             }
           }
         ],
-        "name": "studyhub-backend-dev-joinGroup",
+        "name": "studyhub-backend-prod-joinGroup",
         "package": {},
         "memory": 1024,
         "timeout": 6,
         "runtime": "nodejs20.x",
         "vpc": {},
-        "versionLogicalId": "JoinGroupLambdaVersionkuIG4eAcuLOwNxhGOT6MOyukj3zW31a8Pzb4jB4MYY"
+        "versionLogicalId": "JoinGroupLambdaVersionnj80AinrJEpZsYfhw785ht6cVSkd3FU7WbESrvA8GR4"
       },
       "startSession": {
         "handler": "backend/startSession.handler",
@@ -1276,13 +2090,13 @@
             }
           }
         ],
-        "name": "studyhub-backend-dev-startSession",
+        "name": "studyhub-backend-prod-startSession",
         "package": {},
         "memory": 1024,
         "timeout": 6,
         "runtime": "nodejs20.x",
         "vpc": {},
-        "versionLogicalId": "StartSessionLambdaVersionbOTvQ3j1uYnEOqcDAXG1cBH3SnyR3F0oKzYaCqPo"
+        "versionLogicalId": "StartSessionLambdaVersiondDU6NrfZY2mFb3o94Z2NC8YZriVVRHPFdMrKudB0A"
       },
       "endSession": {
         "handler": "backend/endSession.handler",
@@ -1307,13 +2121,13 @@
             }
           }
         ],
-        "name": "studyhub-backend-dev-endSession",
+        "name": "studyhub-backend-prod-endSession",
         "package": {},
         "memory": 1024,
         "timeout": 6,
         "runtime": "nodejs20.x",
         "vpc": {},
-        "versionLogicalId": "EndSessionLambdaVersionxZFHFccG66CXXkNatflznOgaV6Dd94RJ9CtAOG1GqCw"
+        "versionLogicalId": "EndSessionLambdaVersionsKZBcefIJjPpJwyURTBh80N68gFNIoFyv1DBcX4Coo"
       },
       "getLeaderboard": {
         "handler": "backend/getLeaderboard.handler",
@@ -1338,13 +2152,175 @@
             }
           }
         ],
-        "name": "studyhub-backend-dev-getLeaderboard",
+        "name": "studyhub-backend-prod-getLeaderboard",
         "package": {},
         "memory": 1024,
         "timeout": 6,
         "runtime": "nodejs20.x",
         "vpc": {},
-        "versionLogicalId": "GetLeaderboardLambdaVersiongbtOkXX3O34wdrNej4tQydATWO7iDhHKGyV7BI9d9PM"
+        "versionLogicalId": "GetLeaderboardLambdaVersionb0tjEePp4MzHhQsfYE9WpWnrp1dKfWAWbhUszGF4"
+      },
+      "wsConnect": {
+        "handler": "backend/ws/connect.handler",
+        "events": [
+          {
+            "websocket": {
+              "route": "$connect"
+            }
+          }
+        ],
+        "name": "studyhub-backend-prod-wsConnect",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WsConnectLambdaVersionuVdo5iekoIeiNZM5Zy7zTKO8eeELvVOvFyHBXneUmk"
+      },
+      "wsDisconnect": {
+        "handler": "backend/ws/disconnect.handler",
+        "events": [
+          {
+            "websocket": {
+              "route": "$disconnect"
+            }
+          }
+        ],
+        "name": "studyhub-backend-prod-wsDisconnect",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WsDisconnectLambdaVersionz0YdhGmpFIyuqNW6zGwBti8dyTx1Mfua2NC3VAoOt5k"
+      },
+      "wsDefault": {
+        "handler": "backend/ws/default.handler",
+        "events": [
+          {
+            "websocket": {
+              "route": "$default"
+            }
+          }
+        ],
+        "name": "studyhub-backend-prod-wsDefault",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WsDefaultLambdaVersionwb2iS23iTEB8fswS3vBPcgiAemZDKnB0YJhdjanU0"
+      },
+      "wsSendMessage": {
+        "handler": "backend/ws/sendMessage.handler",
+        "events": [
+          {
+            "websocket": {
+              "route": "sendMessage"
+            }
+          }
+        ],
+        "name": "studyhub-backend-prod-wsSendMessage",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WsSendMessageLambdaVersionnojJzorMLdzkMa8H8Y51cx23zNAfn6RLwVIbPBI"
+      },
+      "wsTyping": {
+        "handler": "backend/ws/typing.handler",
+        "events": [
+          {
+            "websocket": {
+              "route": "typing"
+            }
+          }
+        ],
+        "name": "studyhub-backend-prod-wsTyping",
+        "package": {},
+        "memory": 1024,
+        "timeout": 6,
+        "runtime": "nodejs20.x",
+        "vpc": {},
+        "versionLogicalId": "WsTypingLambdaVersion4sqkAvXpUl1w4urjI5eCykqxeBIaVL3cd0dt1jMFPA"
+      }
+    },
+    "resources": {
+      "Resources": {
+        "ConnectionsTable": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "TableName": "Connections",
+            "BillingMode": "PAY_PER_REQUEST",
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "connectionId",
+                "AttributeType": "S"
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "connectionId",
+                "KeyType": "HASH"
+              }
+            ],
+            "TimeToLiveSpecification": {
+              "AttributeName": "ttl",
+              "Enabled": true
+            }
+          }
+        },
+        "MessagesTable": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "TableName": "Messages",
+            "BillingMode": "PAY_PER_REQUEST",
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "groupId",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "timestamp",
+                "AttributeType": "N"
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "groupId",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "timestamp",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        }
+      },
+      "Outputs": {
+        "WebsocketsApiEndpoint": {
+          "Description": "WebSocket API endpoint",
+          "Value": {
+            "Fn::Join": [
+              "",
+              [
+                "wss://",
+                {
+                  "Ref": "WebsocketsApi"
+                },
+                ".execute-api.",
+                "us-east-1",
+                ".amazonaws.com/",
+                "prod"
+              ]
+            ]
+          },
+          "Export": {
+            "Name": "studyhub-backend-prod-WebsocketsApiEndpoint"
+          }
+        }
       }
     },
     "configValidationMode": "warn",
@@ -1354,20 +2330,26 @@
       "plugins": {
         "$ref": "$[\"service\"][\"plugins\"]"
       },
+      "custom": {
+        "$ref": "$[\"service\"][\"custom\"]"
+      },
       "provider": {
         "$ref": "$[\"service\"][\"provider\"]"
       },
       "functions": {
         "$ref": "$[\"service\"][\"functions\"]"
+      },
+      "resources": {
+        "$ref": "$[\"service\"][\"resources\"]"
       }
     },
     "appId": null,
     "orgId": null,
     "layers": {},
-    "artifact": "C:\\Users\\Kousil\\group-study-app\\infrastructure\\.serverless\\studyhub-backend.zip"
+    "artifact": "/Users/mahalakshmi/Desktop/Study Hub/Study-Hub/infrastructure/.serverless/studyhub-backend.zip"
   },
   "package": {
-    "artifactDirectoryName": "serverless/studyhub-backend/dev/1754340219730-2025-08-04T20:43:39.730Z",
+    "artifactDirectoryName": "serverless/studyhub-backend/prod/1767114572797-2025-12-30T17:09:32.797Z",
     "artifact": "studyhub-backend.zip"
   }
 }

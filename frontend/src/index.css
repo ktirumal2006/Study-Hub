@@ -1,14 +1,66 @@
+@import '@fontsource/inter';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* hide number-input spin buttons */
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+@layer base {
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100;
+    @apply antialiased;
+  }
+
+  h1 {
+    @apply text-4xl font-bold tracking-tight;
+  }
+
+  h2 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+
+  h3 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  h4 {
+    @apply text-xl font-semibold;
+  }
+
+  a {
+    @apply text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300;
+    @apply transition-colors;
+  }
+
+  /* Focus visible styles */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950;
+  }
 }
-input[type=number] {
-  -moz-appearance: textfield;
-  appearance: textfield;
+
+@layer components {
+  /* Subtle background gradients */
+  .bg-gradient-subtle {
+    @apply bg-gradient-to-br from-slate-50 via-white to-slate-50;
+  }
+
+  .dark .bg-gradient-subtle {
+    @apply bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950;
+  }
+}
+
+@layer utilities {
+  /* Hide number input spin buttons */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }

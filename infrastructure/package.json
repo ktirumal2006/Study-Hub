@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "sls": "serverless",
+    "offline": "serverless offline --httpPort 3000 --websocketPort 3001"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "serverless": "^4.22.0",
     "serverless-dynamodb-local": "^0.2.40",
     "serverless-offline": "^14.4.0"
   }

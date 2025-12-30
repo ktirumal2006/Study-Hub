@@ -1,0 +1,46 @@
+# Project Goals
+- Make StudyHub look production-quality with clean layout, consistent spacing, and responsive design.
+- Keep existing functionality (group creation/join, timer, leaderboard), but improve structure, UX, and accessibility.
+- Prefer composable React components and a clear AppShell layout.
+
+# Tech & Design
+- Stack: React + Vite, Tailwind CSS, shadcn/ui components, lucide-react icons.
+- Typography: Inter from Google Fonts. Base font-size 16px; use Tailwind scale.
+- Color palette: Use Tailwind slate/neutral for base; one primary (indigo-600) with hover/active states.
+- Spacing: Use 4/8/12/16/24/32 px steps (Tailwind p-1…p-8). Avoid cramped UIs.
+- Components: Use Cards, Buttons, Inputs, Tabs from shadcn/ui. Avoid ad-hoc div soup.
+- Accessibility: Proper semantic roles, labels, focus states, and keyboard navigation.
+
+# Code Quality
+- Enforce ESLint + Prettier; functional components; hooks only; no class components.
+- Use SWR/React Query pattern if adding data fetching; keep API calls in /src/api.
+- Use TypeScript types if TypeScript is enabled; if not, add JSDoc types.
+- Separate layout components (/src/components/layout) from feature components (/src/features/...).
+
+# File/Folder Conventions
+/src
+  /components      # Reusable UI (buttons, cards, inputs)
+  /components/layout  # AppShell (Header/Sidebar/Main)
+/features
+  /leaderboard
+  /session-timer
+  /groups
+/api               # Fetch wrappers
+/lib               # utils, constants
+/styles            # tailwind and globals
+
+# UI Musts
+- Build an AppShell: header (logo + actions), optional left sidebar (nav), main content grid.
+- Leaderboard: card with table, rank medals, and subtle row hover.
+- Timer: prominent, centered, accessible controls (start/pause/reset), keyboard shortcuts.
+- Empty states for each feature with short helpful copy and CTA.
+- Responsive: 320px→2xl; stack cards on small screens.
+
+# Git & PR
+- Use Conventional Commits: feat/ui: ..., fix: ..., refactor: ...
+- Small PRs with before/after screenshots in the description.
+
+# Don’ts
+- Don’t inline giant CSS strings; prefer Tailwind utilities.
+- Don’t create global mutable singletons.
+- Don’t remove existing features without a migration path/testing.

@@ -3,14 +3,25 @@ service: studyhub-backend
 plugins:
   - serverless-offline
 
+custom:
+  websocketsApiName: studyhub-ws
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  # AWS Account ID for existing DynamoDB tables (Groups, Users, StudySessions)
+  # Update this to match your target AWS account
+  awsAccountId: ${opt:awsAccountId, '842733143619'}
+
 provider:
   name: aws
-  region: us-east-1
+  stage: ${self:custom.stage}
+  region: ${self:custom.region}
 
   environment:
     GROUPS_TABLE:   Groups
     USERS_TABLE:    Users
     SESSIONS_TABLE: StudySessions
+    WS_CONNECTIONS_TABLE: Connections
+    WS_MESSAGES_TABLE: Messages
 
   iam:
     role:
@@ -20,11 +31,21 @@ provider:
             - dynamodb:PutItem
             - dynamodb:UpdateItem
             - dynamodb:Scan
-            - dynamodb:GetItem      # added so joinGroup can read Groups
+            - dynamodb:GetItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
           Resource:
-            - arn:aws:dynamodb:us-east-1:842733143619:table/Groups
-            - arn:aws:dynamodb:us-east-1:842733143619:table/Users
-            - arn:aws:dynamodb:us-east-1:842733143619:table/StudySessions
+            - arn:aws:dynamodb:${self:provider.region}:${self:custom.awsAccountId}:table/Groups
+            - arn:aws:dynamodb:${self:provider.region}:${self:custom.awsAccountId}:table/Users
+            - arn:aws:dynamodb:${self:provider.region}:${self:custom.awsAccountId}:table/StudySessions
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Connections
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Messages
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Messages/index/*
+        - Effect: Allow
+          Action:
+            - execute-api:ManageConnections
+          Resource:
+            - arn:aws:execute-api:${self:provider.region}:*:**/@connections/*
 
 functions:
   createGroup:
@@ -91,3 +112,78 @@ functions:
               - Content-Type
               - Authorization
             allowCredentials: false
+
+  # WebSocket handlers
+  wsConnect:
+    handler: backend/ws/connect.handler
+    events:
+      - websocket:
+          route: $connect
+  wsDisconnect:
+    handler: backend/ws/disconnect.handler
+    events:
+      - websocket:
+          route: $disconnect
+  wsDefault:
+    handler: backend/ws/default.handler
+    events:
+      - websocket:
+          route: $default
+  wsSendMessage:
+    handler: backend/ws/sendMessage.handler
+    events:
+      - websocket:
+          route: sendMessage
+  wsTyping:
+    handler: backend/ws/typing.handler
+    events:
+      - websocket:
+          route: typing
+
+resources:
+  Resources:
+    ConnectionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Connections
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: connectionId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connectionId
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    MessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Messages
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: groupId
+            AttributeType: S
+          - AttributeName: timestamp
+            AttributeType: N
+        KeySchema:
+          - AttributeName: groupId
+            KeyType: HASH
+          - AttributeName: timestamp
+            KeyType: RANGE
+
+  Outputs:
+    WebsocketsApiEndpoint:
+      Description: "WebSocket API endpoint"
+      Value:
+        Fn::Join:
+          - ""
+          - - "wss://"
+            - Ref: WebsocketsApi
+            - ".execute-api."
+            - ${self:provider.region}
+            - ".amazonaws.com/"
+            - ${self:custom.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-WebsocketsApiEndpoint
