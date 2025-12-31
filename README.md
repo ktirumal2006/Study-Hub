@@ -28,7 +28,7 @@ Live Leaderboard: See who’s studied the most minutes each week.
 
 🔗 Live Demo
 
-Try it out: https://study-hub-lyart.vercel.app
+Try it out: [https://study-hub-lyart.vercel.app](https://study-eb8f1raox-saikousil-tirumalasettys-projects.vercel.app/)
 
 ## 💬 Real-Time Chat
 
